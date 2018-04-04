@@ -74,7 +74,7 @@ func TestFindValidation(t *testing.T) {
 func TestIndexSeeks(t *testing.T) {
 	runFactoryTest(t, func(t *testing.T, sw spanstore.Writer, sr spanstore.Reader) {
 		startT := time.Now()
-		traces := 20
+		traces := 60
 		spans := 3
 		tid := startT
 		for i := 0; i < traces; i++ {
@@ -141,10 +141,19 @@ func TestIndexSeeks(t *testing.T) {
 		trs, err = sr.FindTraces(params)
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(trs))
+
+		// Query limited amount of hits
+
+		delete(params.Tags, "k11")
+		params.NumTraces = 2
+		trs, err = sr.FindTraces(params)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(trs))
+
+		// TODO Assert that we fetched correctly in DESC time order
 	})
 }
 
-/*
 func TestMenuSeeks(t *testing.T) {
 	runFactoryTest(t, func(t *testing.T, sw spanstore.Writer, sr spanstore.Reader) {
 		tid := time.Now()
@@ -161,7 +170,7 @@ func TestMenuSeeks(t *testing.T) {
 					SpanID:        model.SpanID(j),
 					OperationName: fmt.Sprintf("operation-%d", j),
 					Process: &model.Process{
-						ServiceName: fmt.Sprintf("service-%d", i%(traces%services)),
+						ServiceName: fmt.Sprintf("service-%d", i%services),
 					},
 					StartTime: tid.Add(time.Duration(i)),
 					Duration:  time.Duration(i + j),
@@ -180,8 +189,9 @@ func TestMenuSeeks(t *testing.T) {
 		assert.Equal(t, spans, len(operations))
 		assert.Equal(t, services, len(serviceList))
 	})
+
+	// TODO Test the KV store loading also for new cache (runFactoryTest removes the temp data)
 }
-*/
 
 // Opens a badger db and runs a a test on it.
 func runFactoryTest(t *testing.T, test func(t *testing.T, sw spanstore.Writer, sr spanstore.Reader)) {

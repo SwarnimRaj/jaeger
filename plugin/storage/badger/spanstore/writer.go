@@ -25,60 +25,70 @@ const (
 	tagIndexKey           byte = 0x03
 	durationIndexKey      byte = 0x04
 	startTimeIndexKey     byte = 0x05 // Reserved
+	jsonEncoding          byte = 0x01 // Last 4 bits of the meta byte are for encoding type
 )
 
 type SpanWriter struct {
 	store *badger.DB
 	ttl   uint64
+	cache *CacheStore
 }
 
-func NewSpanWriter(s *badger.DB, ttl uint64) *SpanWriter {
+func NewSpanWriter(db *badger.DB, c *CacheStore, ttl uint64) *SpanWriter {
 	return &SpanWriter{
-		store: s,
+		store: db,
 		ttl:   ttl,
+		cache: c,
 	}
 }
 
 // WriteSpan writes the encoded span as well as creates indexes with defined TTL
 func (w *SpanWriter) WriteSpan(span *model.Span) error {
-	// TODO Store with Metadata (TTL + encoding)
-	// TODO Txn.SetWithMeta() would allow to indicate for example JSON / Protobuf / compression / etc encoding of the value
-	err := w.store.Update(func(txn *badger.Txn) error {
-		// Write the primary key with a value
-		pkK, pkV, err := createTraceKV(span)
-		if err != nil {
-			return err
-		}
-		err = txn.Set(pkK, pkV)
-		if err != nil {
-			// Most likely primary key conflict, but let the caller check this
-			return err
-		}
 
-		// TODO Optimization: Posting List with time bucketing (using a merge function), insersect to get correct answers
-		// Create the index keys - we use index keys only as they're faster to lookup than fetching the values (and do not require conflict handling)
-		txn.Set(createIndexKey(serviceNameIndexKey, []byte(span.Process.ServiceName), span.StartTime, span.TraceID), nil)
-		// This has to use a different index name than the serviceName, imagine: operation "1", service: "service" vs service: "service1"
-		txn.Set(createIndexKey(operationNameIndexKey, []byte(span.Process.ServiceName+span.OperationName), span.StartTime, span.TraceID), nil)
+	// Avoid doing as much as possible inside the transaction boundary, create entries here
+	entriesToStore := make([]*badger.Entry, 0, len(span.Tags)+4)
 
-		// It doesn't matter if we overwrite Duration index keys, everything is read at Trace level in any case
-		durationValue := make([]byte, 8)
-		binary.BigEndian.PutUint64(durationValue, uint64(span.Duration))
-		txn.Set(createIndexKey(durationIndexKey, durationValue, span.StartTime, span.TraceID), nil)
+	trace, err := w.createTraceEntry(span)
+	if err != nil {
+		return err
+	}
+
+	entriesToStore = append(entriesToStore, trace)
+	entriesToStore = append(entriesToStore, w.createBadgerEntry(createIndexKey(serviceNameIndexKey, []byte(span.Process.ServiceName), span.StartTime, span.TraceID), nil))
+	entriesToStore = append(entriesToStore, w.createBadgerEntry(createIndexKey(operationNameIndexKey, []byte(span.Process.ServiceName+span.OperationName), span.StartTime, span.TraceID), nil))
+
+	// It doesn't matter if we overwrite Duration index keys, everything is read at Trace level in any case
+	durationValue := make([]byte, 8)
+	binary.BigEndian.PutUint64(durationValue, uint64(span.Duration))
+	entriesToStore = append(entriesToStore, w.createBadgerEntry(createIndexKey(durationIndexKey, durationValue, span.StartTime, span.TraceID), nil))
+
+	for _, kv := range span.Tags {
+		// Ignore other types than String for now
+		if kv.VType == model.StringType {
+			// KEY: it<serviceName><tagsKey><traceId> VALUE: <tagsValue>
+			entriesToStore = append(entriesToStore, w.createBadgerEntry(createIndexKey(tagIndexKey, []byte(span.Process.ServiceName+kv.Key+kv.VStr), span.StartTime, span.TraceID), nil))
+		}
+	}
+
+	err = w.store.Update(func(txn *badger.Txn) error {
+		// Write the entries
+		for i := range entriesToStore {
+			err = txn.SetEntry(entriesToStore[i])
+			if err != nil {
+				// Most likely primary key conflict, but let the caller check this
+				return err
+			}
+		}
 
 		// TODO Alternative option is to use simpler keys with the merge value interface. How this scales is a bit trickier
 		// Fine after this is solved: https://github.com/dgraph-io/badger/issues/373
 
-		for _, kv := range span.Tags {
-			// Ignore other types than String for now
-			if kv.VType == model.StringType {
-				// KEY: it<serviceName><tagsKey><traceId> VALUE: <tagsValue>
-				txn.Set(createIndexKey(tagIndexKey, []byte(span.Process.ServiceName+kv.Key+kv.VStr), span.StartTime, span.TraceID), nil)
-			}
-		}
-
 		return nil
 	})
+
+	// Do cache updates here to release the transaction earlier
+	w.cache.Update(span.Process.ServiceName, span.OperationName)
+
 	return err
 }
 
@@ -94,9 +104,27 @@ func createIndexKey(indexPrefixKey byte, value []byte, startTime time.Time, trac
 	return buf.Bytes()
 }
 
+func (w *SpanWriter) createBadgerEntry(key []byte, value []byte) *badger.Entry {
+	return &badger.Entry{
+		Key:       key,
+		Value:     value,
+		ExpiresAt: uint64(time.Now().Add(time.Hour * time.Duration(w.ttl)).Unix()),
+	}
+}
+
+func (w *SpanWriter) createTraceEntry(span *model.Span) (*badger.Entry, error) {
+	pK, pV, err := createTraceKV(span)
+	if err != nil {
+		return nil, err
+	}
+
+	e := w.createBadgerEntry(pK, pV)
+	e.UserMeta = jsonEncoding
+
+	return e, nil
+}
+
 func createTraceKV(span *model.Span) ([]byte, []byte, error) {
-	// This key is bad for fetching a single traceId as it needs to find the next position (we don't know all the starttimes)
-	// Should probably use a merge function to store all the traces under a single key
 	// TODO Add Hash for Zipkin compatibility?
 
 	// Note, KEY must include startTime for proper sorting order for span-ids

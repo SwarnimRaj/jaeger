@@ -47,11 +47,13 @@ const (
 
 type TraceReader struct {
 	store *badger.DB
+	cache *CacheStore
 }
 
-func NewTraceReader(db *badger.DB) *TraceReader {
+func NewTraceReader(db *badger.DB, c *CacheStore) *TraceReader {
 	return &TraceReader{
 		store: db,
+		cache: c,
 	}
 }
 
@@ -102,45 +104,14 @@ func createPrimaryKeySeekPrefix(traceID model.TraceID) []byte {
 	return buf.Bytes()
 }
 
-// GetServices fetches the sorted keys starting with service_ prefix in the keystore
+// GetServices fetches the sorted service list that have not expired
 func (r *TraceReader) GetServices() ([]string, error) {
-	/*
-		An optimization here would be to keep the list of services in-memory and on the start of this plugin fill that cache
-		by reading from the KV-store
-	*/
-	/*
-		indexResults, err := r.readIndexKeys(serviceNameIndexPrefix)
-		services := make([]string, len(indexResults))
-		for _, v := range indexResults {
-			services = append(services, parseIndexValue(serviceNameIndexPrefix, v))
-		}
-		return services, err
-	*/
-	return nil, nil
+	return r.cache.GetServices()
 }
 
-func parseIndexValue(searchKey string, indexResultKey []byte) string {
-	// Remove from the beginning the indexName and from the end traceId's 16 bytes
-	return string(indexResultKey[len([]byte(searchKey))-1 : len(indexResultKey)-16])
-}
-
+// GetOperations fetches operations in the service and empty slice if service does not exists
 func (r *TraceReader) GetOperations(service string) ([]string, error) {
-	/*
-		An optimization here would be to keep the list of operations in-memory and on the start of this plugin fill that cache
-		by reading from the KV-store
-	*/
-	// Operations? (Tags)
-	// KEY: io<servicename><operationname> ? Or reuse service_<servicename>_<operationname> ?
-	/*
-		indexSearchKey := operationNameIndexPrefix + service
-		indexResultKeys, err := r.readIndexKeys(indexSearchKey)
-		results := make([]string, len(indexResultKeys))
-		for _, key := range indexResultKeys {
-			results = append(results, parseIndexValue(indexSearchKey, key)[len(service)-1:])
-		}
-		return results, err
-	*/
-	return nil, nil
+	return r.cache.GetOperations(service)
 }
 
 func (r *TraceReader) FindTraces(query *spanstore.TraceQueryParameters) ([]*model.Trace, error) {
