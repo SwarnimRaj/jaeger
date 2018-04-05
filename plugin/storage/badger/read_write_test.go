@@ -79,6 +79,7 @@ func TestIndexSeeks(t *testing.T) {
 		tid := startT
 		for i := 0; i < traces; i++ {
 			tid = tid.Add(time.Duration(time.Millisecond * time.Duration(i)))
+
 			for j := 0; j < spans; j++ {
 				s := model.Span{
 					TraceID: model.TraceID{
@@ -132,7 +133,7 @@ func TestIndexSeeks(t *testing.T) {
 
 		// Multi-index hits
 
-		params.StartTimeMax = startT.Add(time.Duration(time.Millisecond * 66))
+		params.StartTimeMax = startT.Add(time.Duration(time.Millisecond * 666))
 		params.ServiceName = "service-3"
 		params.OperationName = "operation-1"
 		tags := make(map[string]string)
@@ -144,13 +145,23 @@ func TestIndexSeeks(t *testing.T) {
 
 		// Query limited amount of hits
 
+		params.StartTimeMax = startT.Add(time.Duration(time.Hour * 1))
 		delete(params.Tags, "k11")
 		params.NumTraces = 2
 		trs, err = sr.FindTraces(params)
 		assert.NoError(t, err)
-		assert.Equal(t, 1, len(trs))
+		assert.Equal(t, 2, len(trs))
 
-		// TODO Assert that we fetched correctly in DESC time order
+		// Check for DESC return order
+		params.NumTraces = 9
+		trs, err = sr.FindTraces(params)
+		assert.NoError(t, err)
+		assert.Equal(t, 9, len(trs))
+
+		// Assert that we fetched correctly in DESC time order
+		for l := 1; l < len(trs); l++ {
+			assert.True(t, trs[l].Spans[spans-1].StartTime.Before(trs[l-1].Spans[spans-1].StartTime))
+		}
 	})
 }
 

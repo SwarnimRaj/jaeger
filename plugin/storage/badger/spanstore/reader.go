@@ -171,31 +171,40 @@ func (r *TraceReader) FindTraces(query *spanstore.TraceQueryParameters) ([]*mode
 		intersected := ids[0]
 		mergeIntersected := make([][]byte, 0, len(intersected)) // intersected is the maximum size
 
-		for i := 1; i < len(ids); i++ {
-			k := len(intersected) - 1
-			for j := len(ids[i]) - 1; j >= 0 && k >= 0; {
-				// The result will be 0 if a==b, -1 if a < b, and +1 if a > b.
-				switch bytes.Compare(intersected[k], ids[i][j]) {
-				case 1:
-					k-- // Move on to the next item in the intersected list
-					// a > b
-				case -1:
-					j--
-					// a < b
-					// Move on to next iteration of j
-				case 0:
-					mergeIntersected = append(mergeIntersected, intersected[k])
-					k-- // Move on to next item
-					// Match
+		if len(ids) > 1 {
+			for i := 1; i < len(ids); i++ {
+				mergeIntersected = make([][]byte, 0, len(intersected)) // intersected is the maximum size
+				k := len(intersected) - 1
+				for j := len(ids[i]) - 1; j >= 0 && k >= 0; {
+					// The result will be 0 if a==b, -1 if a < b, and +1 if a > b.
+					switch bytes.Compare(intersected[k], ids[i][j]) {
+					case 1:
+						k-- // Move on to the next item in the intersected list
+						// a > b
+					case -1:
+						j--
+						// a < b
+						// Move on to next iteration of j
+					case 0:
+						mergeIntersected = append(mergeIntersected, intersected[k])
+						k-- // Move on to next item
+						// Match
+					}
 				}
+				intersected = mergeIntersected
+			}
+
+		} else {
+			// mergeIntersected should be reversed intersected
+			for i, j := 0, len(intersected)-1; j >= 0; i, j = i+1, j-1 {
+				mergeIntersected = append(mergeIntersected, intersected[j])
 			}
 			intersected = mergeIntersected
-			mergeIntersected = make([][]byte, 0, len(intersected)) // intersected is the maximum size
 		}
 
 		// Get top query.NumTraces results (note, the slice is now in descending timestamp order)
 		if query.NumTraces < len(intersected) {
-			intersected = intersected[:query.NumTraces-1]
+			intersected = intersected[:query.NumTraces]
 		}
 
 		// Enrich the traceIds to model.Trace
