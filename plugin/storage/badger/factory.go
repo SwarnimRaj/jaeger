@@ -40,6 +40,7 @@ func (f *Factory) Initialize(metricsFactory metrics.Factory, logger *zap.Logger)
 	// TODO Temporary for testing purposes
 	opts.Dir = "/tmp/badger"
 	opts.ValueDir = "/tmp/badger"
+	opts.SyncWrites = false
 
 	f.ttl = defaultTTL // TODO Make configurable TTL
 

@@ -59,7 +59,7 @@ func (w *SpanWriter) WriteSpan(span *model.Span) error {
 
 	// It doesn't matter if we overwrite Duration index keys, everything is read at Trace level in any case
 	durationValue := make([]byte, 8)
-	binary.BigEndian.PutUint64(durationValue, uint64(span.Duration))
+	binary.BigEndian.PutUint64(durationValue, uint64(model.DurationAsMicroseconds(span.Duration)))
 	entriesToStore = append(entriesToStore, w.createBadgerEntry(createIndexKey(durationIndexKey, durationValue, span.StartTime, span.TraceID), nil))
 
 	for _, kv := range span.Tags {
@@ -86,7 +86,7 @@ func (w *SpanWriter) WriteSpan(span *model.Span) error {
 		return nil
 	})
 
-	// Do cache updates here to release the transaction earlier
+	// Do cache refresh here to release the transaction earlier
 	w.cache.Update(span.Process.ServiceName, span.OperationName)
 
 	return err

@@ -17,7 +17,7 @@ import (
 )
 
 func TestWriteReadBack(t *testing.T) {
-	runFactoryTest(t, func(t *testing.T, sw spanstore.Writer, sr spanstore.Reader) {
+	runFactoryTest(t, func(tb testing.TB, sw spanstore.Writer, sr spanstore.Reader) {
 		tid := time.Now()
 		traces := 40
 		spans := 3
@@ -54,7 +54,7 @@ func TestWriteReadBack(t *testing.T) {
 }
 
 func TestFindValidation(t *testing.T) {
-	runFactoryTest(t, func(t *testing.T, sw spanstore.Writer, sr spanstore.Reader) {
+	runFactoryTest(t, func(tb testing.TB, sw spanstore.Writer, sr spanstore.Reader) {
 		tid := time.Now()
 		params := &spanstore.TraceQueryParameters{
 			StartTimeMin: tid,
@@ -72,7 +72,7 @@ func TestFindValidation(t *testing.T) {
 }
 
 func TestIndexSeeks(t *testing.T) {
-	runFactoryTest(t, func(t *testing.T, sw spanstore.Writer, sr spanstore.Reader) {
+	runFactoryTest(t, func(tb testing.TB, sw spanstore.Writer, sr spanstore.Reader) {
 		startT := time.Now()
 		traces := 60
 		spans := 3
@@ -92,7 +92,7 @@ func TestIndexSeeks(t *testing.T) {
 						ServiceName: fmt.Sprintf("service-%d", i%4),
 					},
 					StartTime: tid,
-					Duration:  time.Duration(i + j),
+					Duration:  time.Duration(time.Duration(i+j) * time.Millisecond),
 					Tags: model.KeyValues{
 						model.KeyValue{
 							Key:   fmt.Sprintf("k%d", i),
@@ -139,6 +139,8 @@ func TestIndexSeeks(t *testing.T) {
 		tags := make(map[string]string)
 		tags["k11"] = "val0"
 		params.Tags = tags
+		params.DurationMin = time.Duration(1 * time.Millisecond)
+		params.DurationMax = time.Duration(1 * time.Hour)
 		trs, err = sr.FindTraces(params)
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(trs))
@@ -166,7 +168,7 @@ func TestIndexSeeks(t *testing.T) {
 }
 
 func TestMenuSeeks(t *testing.T) {
-	runFactoryTest(t, func(t *testing.T, sw spanstore.Writer, sr spanstore.Reader) {
+	runFactoryTest(t, func(tb testing.TB, sw spanstore.Writer, sr spanstore.Reader) {
 		tid := time.Now()
 		traces := 40
 		services := 4
@@ -205,14 +207,10 @@ func TestMenuSeeks(t *testing.T) {
 }
 
 // Opens a badger db and runs a a test on it.
+/*
 func runFactoryTest(t *testing.T, test func(t *testing.T, sw spanstore.Writer, sr spanstore.Reader)) {
 	f := NewFactory()
 	// TODO Initialize with temporary directories which can be deleted afterwards
-
-	/*
-		dir, err := ioutil.TempDir("", "badger")
-		assert.NoError(t, err)
-	*/
 	err := f.Initialize(metrics.NullFactory, zap.NewNop())
 	assert.NoError(t, err)
 
@@ -233,6 +231,47 @@ func runFactoryTest(t *testing.T, test func(t *testing.T, sw spanstore.Writer, s
 		// os.RemoveAll(dir)
 		os.RemoveAll("/tmp/badger")
 	}()
+	test(t, sw, sr)
+}
+*/
+
+// Opens a badger db and runs a a test on it.
+func runFactoryTest(tb testing.TB, bench func(tb testing.TB, sw spanstore.Writer, sr spanstore.Reader)) {
+	f := NewFactory()
+	// TODO Initialize with temporary directories which can be deleted afterwards
+
+	/*
+		dir, err := ioutil.TempDir("", "badger")
+		assert.NoError(t, err)
+	*/
+	err := f.Initialize(metrics.NullFactory, zap.NewNop())
+	if err != nil {
+		tb.FailNow()
+	}
+
+	sw, err := f.CreateSpanWriter()
+	if err != nil {
+		tb.FailNow()
+	}
+
+	sr, err := f.CreateSpanReader()
+	if err != nil {
+		tb.FailNow()
+	}
+
+	defer func() {
+		if closer, ok := sw.(io.Closer); ok {
+			err := closer.Close()
+			if err != nil {
+				tb.FailNow()
+			}
+		} else {
+			tb.FailNow()
+		}
+
+		// os.RemoveAll(dir)
+		os.RemoveAll("/tmp/badger")
+	}()
 	/*
 
 		dir, err := ioutil.TempDir("", "badger")
@@ -248,5 +287,50 @@ func runFactoryTest(t *testing.T, test func(t *testing.T, sw spanstore.Writer, s
 		test(t, db)
 	*/
 
-	test(t, sw, sr)
+	bench(tb, sw, sr)
+}
+
+func BenchmarkInsert(b *testing.B) {
+	runFactoryTest(b, func(tb testing.TB, sw spanstore.Writer, sr spanstore.Reader) {
+		// b := tb.(*testing.B)
+
+		tid := time.Now()
+		traces := 10000
+		spans := 3
+
+		b.ResetTimer()
+
+		// wg := sync.WaitGroup{}
+
+		for u := 0; u < b.N; u++ {
+			for i := 0; i < traces; i++ {
+				// go func() {
+				// wg.Add(1)
+				for j := 0; j < spans; j++ {
+					s := model.Span{
+						TraceID: model.TraceID{
+							Low:  uint64(i),
+							High: 1,
+						},
+						SpanID:        model.SpanID(j),
+						OperationName: "operation",
+						Process: &model.Process{
+							ServiceName: "service",
+						},
+						StartTime: tid.Add(time.Duration(i)),
+						Duration:  time.Duration(i + j),
+					}
+
+					err := sw.WriteSpan(&s)
+					if err != nil {
+						b.FailNow()
+					}
+				}
+				// wg.Done()
+				// }()
+			}
+		}
+		// wg.Wait()
+		b.StopTimer()
+	})
 }

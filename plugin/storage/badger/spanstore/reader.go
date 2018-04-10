@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"math"
 	"time"
 
 	"github.com/dgraph-io/badger"
@@ -57,43 +58,65 @@ func NewTraceReader(db *badger.DB, c *CacheStore) *TraceReader {
 	}
 }
 
-func (r *TraceReader) GetTrace(traceID model.TraceID) (*model.Trace, error) {
+func (r *TraceReader) getTraces(traceIDs []model.TraceID) ([]*model.Trace, error) {
 	// Get by PK
-	spans := make([]*model.Span, 0)
+	traces := make([]*model.Trace, 0, len(traceIDs))
+	prefixes := make([][]byte, 0, len(traceIDs))
+
+	for _, traceID := range traceIDs {
+		prefixes = append(prefixes, createPrimaryKeySeekPrefix(traceID))
+	}
 
 	err := r.store.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
+		opts.PrefetchSize = 1 // TraceIDs are not sorted, pointless to prefetch large amount of values
 		it := txn.NewIterator(opts)
 		defer it.Close()
 
-		prefix := createPrimaryKeySeekPrefix(traceID)
+		val := []byte{}
+		for _, prefix := range prefixes {
+			spans := make([]*model.Span, 0, 4) // reduce reallocation requirements by defining some initial length
 
-		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-			// Add value to the span store (decode from JSON / defined encoding first)
-			// These are in the correct order because of the sorted nature
-			item := it.Item()
-			val, err := item.Value()
+			for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+				// Add value to the span store (decode from JSON / defined encoding first)
+				// These are in the correct order because of the sorted nature
+				item := it.Item()
+				val, err := item.ValueCopy(val)
 
-			if err != nil {
-				return err
+				if err != nil {
+					return err
+				}
+
+				sp := model.Span{}
+				err = json.Unmarshal(val, &sp)
+				if err != nil {
+					return err
+				}
+				spans = append(spans, &sp)
 			}
-			sp := model.Span{}
-			err = json.Unmarshal(val, &sp)
-			if err != nil {
-				return err
+			trace := &model.Trace{
+				Spans: spans,
 			}
-			spans = append(spans, &sp)
+			traces = append(traces, trace)
 		}
+
 		return nil
 	})
 
-	// TODO Do the Unmarshal here so we can release the transaction
+	// TODO Do the Unmarshal here so we can release the transaction earlier (we would pay with extra allocations..)
 
-	trace := &model.Trace{
-		Spans: spans,
+	return traces, err
+
+}
+func (r *TraceReader) GetTrace(traceID model.TraceID) (*model.Trace, error) {
+	traces, err := r.getTraces([]model.TraceID{traceID})
+	if err != nil {
+		return nil, err
+	} else if len(traces) == 1 {
+		return traces[0], nil
 	}
 
-	return trace, err
+	return nil, nil
 }
 
 func createPrimaryKeySeekPrefix(traceID model.TraceID) []byte {
@@ -115,9 +138,6 @@ func (r *TraceReader) GetOperations(service string) ([]string, error) {
 }
 
 func (r *TraceReader) FindTraces(query *spanstore.TraceQueryParameters) ([]*model.Trace, error) {
-
-	// TODO Optimize these queries by using adaptive range query filters to avoid unnecessarily large queries for the set operations
-	// Improves scalability for the read path
 	err := validateQuery(query)
 	if err != nil {
 		return nil, err
@@ -151,12 +171,8 @@ func (r *TraceReader) FindTraces(query *spanstore.TraceQueryParameters) ([]*mode
 		}
 	}
 
-	// TODO DurationIndex scanning (it is range index scanning - not exact seek)
-
-	// Get intersection of all the hits.. optimization problem without distribution knowledge: would it make more sense to scan the primary keys and decode them instead?
-	// Key only scan is a lot faster in the badger
+	ids := make([][][]byte, 0, len(indexSeeks)+1)
 	if len(indexSeeks) > 0 {
-		ids := make([][][]byte, 0, len(indexSeeks))
 		for i, s := range indexSeeks {
 			indexResults, _ := r.scanIndexKeys(s, query.StartTimeMin, query.StartTimeMax)
 			if err != nil {
@@ -167,7 +183,58 @@ func (r *TraceReader) FindTraces(query *spanstore.TraceQueryParameters) ([]*mode
 				ids[i] = append(ids[i], k[len(k)-16:])
 			}
 		}
+	}
 
+	// Only secondary range index for now (StartTime filtering should be done using the PK)
+	if query.DurationMax != 0 || query.DurationMin != 0 {
+		durMax := uint64(model.DurationAsMicroseconds(query.DurationMax))
+		durMin := uint64(model.DurationAsMicroseconds(query.DurationMin))
+
+		startKey := make([]byte, 0, 9)
+		endKey := make([]byte, 0, 9)
+
+		startKey = append(startKey, durationIndexKey) // [0] =
+		endKey = append(endKey, durationIndexKey)
+
+		endVal := make([]byte, 8)
+		if query.DurationMax == 0 {
+			// Set MAX to infinite, if Min is missing, 0 is a fine search result for us
+			durMax = math.MaxUint64
+		}
+		binary.BigEndian.PutUint64(endVal, durMax)
+
+		startVal := make([]byte, 8)
+		binary.BigEndian.PutUint64(startVal, durMin)
+
+		startKey = append(startKey, startVal...)
+		endKey = append(endKey, endVal...)
+
+		// This is not unique index result - same TraceID can be matched from multiple spans
+		indexResults, _ := r.scanRangeIndex(startKey, endKey, query.StartTimeMin, query.StartTimeMax)
+		hashFilter := make(map[model.TraceID]struct{})
+		filteredResults := make([][]byte, 0, len(indexResults)) // Max possible length
+		var value struct{}
+		for _, k := range indexResults {
+			key := k[len(k)-16:]
+			id := model.TraceID{
+				High: binary.BigEndian.Uint64(key[:8]),
+				Low:  binary.BigEndian.Uint64(key[8:]),
+			}
+			if _, exists := hashFilter[id]; !exists {
+				filteredResults = append(filteredResults, key)
+				hashFilter[id] = value
+			}
+		}
+		ids = append(ids, filteredResults)
+	}
+
+	// Get intersection of all the hits.. optimization problem without distribution knowledge: would it make more sense to scan the primary keys and decode them instead?
+	// Key only scan is a lot faster in the badger - use sort-merge join algorithm instead of hash join since we have the keys in sorted order already
+
+	// TODO We currently return [][]byte from the index search results, but we could do the transformation to []model.TraceID there already and just define our
+	// own compare function instead of bytes.Compare
+
+	if len(ids) > 0 {
 		intersected := ids[0]
 		mergeIntersected := make([][]byte, 0, len(intersected)) // intersected is the maximum size
 
@@ -208,25 +275,20 @@ func (r *TraceReader) FindTraces(query *spanstore.TraceQueryParameters) ([]*mode
 		}
 
 		// Enrich the traceIds to model.Trace
-		result := make([]*model.Trace, 0, len(intersected))
+		// result := make([]*model.Trace, 0, len(intersected))
+		keys := make([]model.TraceID, 0, len(intersected))
+
 		for _, key := range intersected {
-			// TODO This is a slow way to do the read, since each of these calls starts a new transaction
-			// Done for the PoC only
-			tr, err := r.GetTrace(
-				model.TraceID{
-					High: binary.BigEndian.Uint64(key[:8]),
-					Low:  binary.BigEndian.Uint64(key[8:]),
-				},
-			)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, tr)
+			keys = append(keys, model.TraceID{
+				High: binary.BigEndian.Uint64(key[:8]),
+				Low:  binary.BigEndian.Uint64(key[8:]),
+			})
 		}
 
-		return result, nil
+		return r.getTraces(keys)
 	}
-	// We need to do a primary key scan and check all the TraceIDs if they match certain time range (full table scan basically unless we add index for it)
+	// TODO We need to do a primary key scan and check all the TraceIDs if they match certain time range (full table scan)
+	// Then sort them based on the time
 	return nil, ErrNotSupported
 }
 
@@ -302,8 +364,55 @@ func scanFunction(it *badger.Iterator, indexPrefix []byte, timeIndexEnd uint64) 
 	return false
 }
 
+// scanIndexKeys scans the time range for index keys matching the given prefix.
+func (r *TraceReader) scanRangeIndex(indexStartValue []byte, indexEndValue []byte, startTimeMin time.Time, startTimeMax time.Time) ([][]byte, error) {
+	indexResults := make([][]byte, 0)
+
+	startStampBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(startStampBytes, model.TimeAsEpochMicroseconds(startTimeMin))
+
+	err := r.store.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // Don't fetch values since we're only interested in the keys
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		// Create starting point for sorted index scan
+		startIndex := make([]byte, 0, len(indexStartValue)+len(startStampBytes))
+		startIndex = append(startIndex, indexStartValue...)
+		startIndex = append(startIndex, startStampBytes...)
+
+		timeIndexEnd := model.TimeAsEpochMicroseconds(startTimeMax)
+
+		for it.Seek(startIndex); scanRangeFunction(it, indexEndValue); it.Next() {
+			item := it.Item()
+
+			// ScanFunction is a prefix scanning (since we could have for example service1 & service12)
+			// Now we need to match only the exact key if we want to add it
+			timestampStartIndex := len(it.Item().Key()) - 24
+			timestamp := binary.BigEndian.Uint64(it.Item().Key()[timestampStartIndex : timestampStartIndex+8])
+			if timestamp <= timeIndexEnd {
+				key := []byte{}
+				key = append(key, item.Key()...) // badger reuses underlying slices so we have to copy the key
+				indexResults = append(indexResults, key)
+			}
+		}
+		return nil
+	})
+	return indexResults, err
+}
+
+// scanRangeFunction seeks until the index end has been reached
+func scanRangeFunction(it *badger.Iterator, indexEndValue []byte) bool {
+	if it.Item() != nil {
+		compareSlice := it.Item().Key()[:len(indexEndValue)]
+		return bytes.Compare(indexEndValue, compareSlice) >= 0
+	}
+	return false
+}
+
 // Close Implements io.Closer
-func (w *TraceReader) Close() error {
+func (r *TraceReader) Close() error {
 	// Allows this to be signaled that we've been closed
 	return nil
 }
