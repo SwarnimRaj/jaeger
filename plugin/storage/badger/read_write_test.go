@@ -164,6 +164,28 @@ func TestIndexSeeks(t *testing.T) {
 		for l := 1; l < len(trs); l++ {
 			assert.True(t, trs[l].Spans[spans-1].StartTime.Before(trs[l-1].Spans[spans-1].StartTime))
 		}
+
+		// StartTime and Duration queries
+		params = &spanstore.TraceQueryParameters{
+			StartTimeMin: startT,
+			StartTimeMax: startT.Add(time.Duration(time.Millisecond * 10)),
+		}
+
+		// StartTime query only
+		/*
+			trs, err = sr.FindTraces(params)
+			assert.NoError(t, err)
+			assert.Equal(t, 10, len(trs))
+		*/
+
+		// Duration query
+		params.StartTimeMax = startT.Add(time.Duration(time.Hour * 10))
+		params.DurationMin = time.Duration(53 * time.Millisecond) // trace 51 (max)
+		params.DurationMax = time.Duration(56 * time.Millisecond) // trace 56 (min)
+
+		trs, err = sr.FindTraces(params)
+		assert.NoError(t, err)
+		assert.Equal(t, 6, len(trs))
 	})
 }
 
