@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"testing"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/jaegertracing/jaeger/model"
+	"github.com/jaegertracing/jaeger/pkg/config"
 	"github.com/jaegertracing/jaeger/storage/spanstore"
 	assert "github.com/stretchr/testify/require"
 )
@@ -229,43 +229,16 @@ func TestMenuSeeks(t *testing.T) {
 }
 
 // Opens a badger db and runs a a test on it.
-/*
-func runFactoryTest(t *testing.T, test func(t *testing.T, sw spanstore.Writer, sr spanstore.Reader)) {
+func runFactoryTest(tb testing.TB, test func(tb testing.TB, sw spanstore.Writer, sr spanstore.Reader)) {
 	f := NewFactory()
-	// TODO Initialize with temporary directories which can be deleted afterwards
-	err := f.Initialize(metrics.NullFactory, zap.NewNop())
-	assert.NoError(t, err)
+	opts := NewOptions("badger")
+	v, command := config.Viperize(opts.AddFlags)
+	command.ParseFlags([]string{
+		"--badger.ephemeral=true",
+		"--badger.consistency=false",
+	})
+	f.InitFromViper(v)
 
-	sw, err := f.CreateSpanWriter()
-	assert.NoError(t, err)
-
-	sr, err := f.CreateSpanReader()
-	assert.NoError(t, err)
-
-	defer func() {
-		if closer, ok := sw.(io.Closer); ok {
-			err := closer.Close()
-			assert.NoError(t, err)
-		} else {
-			t.FailNow()
-		}
-
-		// os.RemoveAll(dir)
-		os.RemoveAll("/tmp/badger")
-	}()
-	test(t, sw, sr)
-}
-*/
-
-// Opens a badger db and runs a a test on it.
-func runFactoryTest(tb testing.TB, bench func(tb testing.TB, sw spanstore.Writer, sr spanstore.Reader)) {
-	f := NewFactory()
-	// TODO Initialize with temporary directories which can be deleted afterwards
-
-	/*
-		dir, err := ioutil.TempDir("", "badger")
-		assert.NoError(t, err)
-	*/
 	err := f.Initialize(metrics.NullFactory, zap.NewNop())
 	if err != nil {
 		tb.FailNow()
@@ -291,25 +264,8 @@ func runFactoryTest(tb testing.TB, bench func(tb testing.TB, sw spanstore.Writer
 			tb.FailNow()
 		}
 
-		// os.RemoveAll(dir)
-		os.RemoveAll("/tmp/badger")
 	}()
-	/*
-
-		dir, err := ioutil.TempDir("", "badger")
-		require.NoError(t, err)
-		defer os.RemoveAll(dir)
-		if opts == nil {
-			opts = new(Options)
-			*opts = getTestOptions(dir)
-		}
-		db, err := Open(*opts)
-		require.NoError(t, err)
-		defer db.Close()
-		test(t, db)
-	*/
-
-	bench(tb, sw, sr)
+	test(tb, sw, sr)
 }
 
 func BenchmarkInsert(b *testing.B) {

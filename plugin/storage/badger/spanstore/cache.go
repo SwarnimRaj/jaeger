@@ -15,10 +15,10 @@ type CacheStore struct {
 	operations map[string]map[string]int64
 
 	store *badger.DB
-	ttl   uint64 // Expire time in hours
+	ttl   time.Duration
 }
 
-func NewCacheStore(db *badger.DB, ttl uint64) (*CacheStore, error) {
+func NewCacheStore(db *badger.DB, ttl time.Duration) (*CacheStore, error) {
 	cs := &CacheStore{
 		services:   make(map[string]int64),
 		operations: make(map[string]map[string]int64),
@@ -111,7 +111,7 @@ func (c *CacheStore) loadOperations(service string) error {
 // Update caches the results of service and service + operation indexes and maintains their TTL
 func (c *CacheStore) Update(service string, operation string) {
 	c.cacheLock.Lock()
-	t := time.Now().Add(time.Hour * time.Duration(c.ttl)).Unix()
+	t := time.Now().Add(c.ttl).Unix()
 
 	c.services[service] = t
 	if _, ok := c.operations[service]; !ok {

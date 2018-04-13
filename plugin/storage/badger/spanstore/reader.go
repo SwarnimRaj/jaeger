@@ -211,7 +211,7 @@ func (r *TraceReader) FindTraces(query *spanstore.TraceQueryParameters) ([]*mode
 
 		// This is not unique index result - same TraceID can be matched from multiple spans
 		indexResults, _ := r.scanRangeIndex(startKey, endKey, query.StartTimeMin, query.StartTimeMax)
-		hashFilter := make(map[model.TraceID]struct{})
+		hashFilter := make(map[model.TraceID]struct{}, len(indexResults))
 		filteredResults := make([][]byte, 0, len(indexResults)) // Max possible length
 		var value struct{}
 		for _, k := range indexResults {

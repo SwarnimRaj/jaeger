@@ -29,16 +29,18 @@ const (
 )
 
 type SpanWriter struct {
-	store *badger.DB
-	ttl   uint64
-	cache *CacheStore
+	store  *badger.DB
+	ttl    time.Duration
+	cache  *CacheStore
+	closer func() error
 }
 
-func NewSpanWriter(db *badger.DB, c *CacheStore, ttl uint64) *SpanWriter {
+func NewSpanWriter(db *badger.DB, c *CacheStore, ttl time.Duration, closer func() error) *SpanWriter {
 	return &SpanWriter{
-		store: db,
-		ttl:   ttl,
-		cache: c,
+		store:  db,
+		ttl:    ttl,
+		cache:  c,
+		closer: closer,
 	}
 }
 
@@ -108,7 +110,7 @@ func (w *SpanWriter) createBadgerEntry(key []byte, value []byte) *badger.Entry {
 	return &badger.Entry{
 		Key:       key,
 		Value:     value,
-		ExpiresAt: uint64(time.Now().Add(time.Hour * time.Duration(w.ttl)).Unix()),
+		ExpiresAt: uint64(time.Now().Add(w.ttl).Unix()),
 	}
 }
 
@@ -144,5 +146,5 @@ func createTraceKV(span *model.Span) ([]byte, []byte, error) {
 
 // Close Implements io.Closer and closes the underlying storage
 func (w *SpanWriter) Close() error {
-	return w.store.Close()
+	return w.closer()
 }
