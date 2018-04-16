@@ -55,6 +55,8 @@ import:
 - package: github.com/go-openapi/validate
 - package: github.com/go-openapi/loads
 - package: github.com/rakyll/statik/fs
+- package: github.com/dgraph-io/badger
+  version: ~1.5.2
 - package: github.com/Shopify/sarama
   version: ^1.16.0
 # gogo/protobuf dependencies
@@ -70,3 +72,5 @@ import:
   version: master
 - package: github.com/gogo/gateway
   version: master
+- package: github.com/pelletier/go-toml
+  version: v1.2.0

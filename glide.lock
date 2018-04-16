@@ -1,6 +1,8 @@
-hash: b7aada76fe425b7f507a331dba1efe365bc166aca596f688610f185ea18c294a
-updated: 2018-07-08T13:51:21.928395-04:00
+hash: 6ce6a905c9f203c7d6d9aeb3ebd78249cf1474bb2a477e3457e974b19abf6fa5
+updated: 2018-07-10T14:06:34.322605043+03:00
 imports:
+- name: github.com/AndreasBriese/bbloom
+  version: 28f7e881ca57bc00e028f9ede9f0d9104cfeef5e
 - name: github.com/apache/thrift
   version: 53dd39833a08ce33582e5ff31fa18bb4735d6731
   subpackages:
@@ -19,9 +21,19 @@ imports:
   - assert
   - require
 - name: github.com/davecgh/go-spew
-  version: 8991bc29aa16c548c550c7ff78260e27b9ab7c73
+  version: 346938d642f2ec3594ed81d874461961cd0faa76
   subpackages:
   - spew
+- name: github.com/dgraph-io/badger
+  version: a6f0866f06a0ef6ac612e427ffe5d081db4e6fab
+  subpackages:
+  - options
+  - protos
+  - skl
+  - table
+  - "y"
+- name: github.com/dgryski/go-farm
+  version: 2de33835d10275975374b37b2dcfd22c9020a1f5
 - name: github.com/eapache/go-resiliency
   version: ea41b0fad31007accc7f806884dcdf3da98b79ce
   subpackages:
@@ -159,7 +171,7 @@ imports:
   - ext
   - log
 - name: github.com/pelletier/go-toml
-  version: 4e9e0ee19b60b13eb79915933f44d8ed5f268bdd
+  version: c01d1270ff3e442a8a57cddc1c92dc1138598194
 - name: github.com/pierrec/lz4
   version: 6b9367c9ff401dbc54fabce3fb8d972e799b702d
   subpackages:
@@ -289,7 +301,7 @@ imports:
   - zapcore
   - zaptest
 - name: golang.org/x/net
-  version: 32a936f46389aa10549d60bd7833e54b01685d09
+  version: a6577fac2d73be281a500b310739095313165611
   subpackages:
   - context
   - context/ctxhttp
@@ -298,6 +310,7 @@ imports:
   - http2/hpack
   - idna
   - internal/timeseries
+  - lex/httplex
   - trace
 - name: golang.org/x/sys
   version: d4feaf1a7e61e1d9e79e6c4e76c6349e9cab0a03
