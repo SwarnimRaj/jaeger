@@ -69,7 +69,7 @@ func (r *TraceReader) getTraces(traceIDs []model.TraceID) ([]*model.Trace, error
 
 	err := r.store.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
-		opts.PrefetchSize = 1 // TraceIDs are not sorted, pointless to prefetch large amount of values
+		opts.PrefetchSize = 10 // TraceIDs are not sorted, pointless to prefetch large amount of values
 		it := txn.NewIterator(opts)
 		defer it.Close()
 
@@ -77,6 +77,7 @@ func (r *TraceReader) getTraces(traceIDs []model.TraceID) ([]*model.Trace, error
 		for _, prefix := range prefixes {
 			spans := make([]*model.Span, 0, 4) // reduce reallocation requirements by defining some initial length
 
+			d := 0
 			for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 				// Add value to the span store (decode from JSON / defined encoding first)
 				// These are in the correct order because of the sorted nature
@@ -93,13 +94,13 @@ func (r *TraceReader) getTraces(traceIDs []model.TraceID) ([]*model.Trace, error
 					return err
 				}
 				spans = append(spans, &sp)
+				d++
 			}
 			trace := &model.Trace{
 				Spans: spans,
 			}
 			traces = append(traces, trace)
 		}
-
 		return nil
 	})
 
@@ -121,7 +122,7 @@ func (r *TraceReader) GetTrace(traceID model.TraceID) (*model.Trace, error) {
 
 func createPrimaryKeySeekPrefix(traceID model.TraceID) []byte {
 	buf := new(bytes.Buffer)
-	buf.WriteByte(primaryKeyPrefix)
+	buf.WriteByte(spanKeyPrefix)
 	binary.Write(buf, binary.BigEndian, traceID.High)
 	binary.Write(buf, binary.BigEndian, traceID.Low)
 	return buf.Bytes()
@@ -212,20 +213,29 @@ func (r *TraceReader) FindTraces(query *spanstore.TraceQueryParameters) ([]*mode
 		// This is not unique index result - same TraceID can be matched from multiple spans
 		indexResults, _ := r.scanRangeIndex(startKey, endKey, query.StartTimeMin, query.StartTimeMax)
 		hashFilter := make(map[model.TraceID]struct{}, len(indexResults))
-		filteredResults := make([][]byte, 0, len(indexResults)) // Max possible length
+		filteredResults := make([]*model.TraceID, 0, len(indexResults)) // Max possible length
+		appendableResults := make([][]byte, 0, len(indexResults))       // Max possible length
 		var value struct{}
 		for _, k := range indexResults {
 			key := k[len(k)-16:]
-			id := model.TraceID{
+			id := &model.TraceID{
 				High: binary.BigEndian.Uint64(key[:8]),
 				Low:  binary.BigEndian.Uint64(key[8:]),
 			}
-			if _, exists := hashFilter[id]; !exists {
-				filteredResults = append(filteredResults, key)
-				hashFilter[id] = value
+			if _, exists := hashFilter[*id]; !exists {
+				filteredResults = append(filteredResults, id)
+				hashFilter[*id] = value
 			}
 		}
-		ids = append(ids, filteredResults)
+
+		model.SortTraceIDs(filteredResults)
+
+		// This is an ugly hack at this point - but has no impact on performance really
+		for _, tr := range filteredResults {
+			appendableResults = append(appendableResults, traceIDToComparableBytes(tr))
+		}
+
+		ids = append(ids, appendableResults)
 	}
 
 	// Get intersection of all the hits.. optimization problem without distribution knowledge: would it make more sense to scan the primary keys and decode them instead?
@@ -409,6 +419,15 @@ func scanRangeFunction(it *badger.Iterator, indexEndValue []byte) bool {
 		return bytes.Compare(indexEndValue, compareSlice) >= 0
 	}
 	return false
+}
+
+func traceIDToComparableBytes(traceID *model.TraceID) []byte {
+	buf := new(bytes.Buffer)
+
+	binary.Write(buf, binary.BigEndian, traceID.High)
+	binary.Write(buf, binary.BigEndian, traceID.Low)
+
+	return buf.Bytes()
 }
 
 // Close Implements io.Closer

@@ -18,13 +18,16 @@ import (
 */
 
 const (
-	primaryKeyPrefix      byte = 0x80 // All primary key values should have first bit set to 1
-	indexKeyPrefix        byte = 0x00 // All secondary indexes should have first bit set to 0
-	serviceNameIndexKey   byte = 0x01
-	operationNameIndexKey byte = 0x02
-	tagIndexKey           byte = 0x03
-	durationIndexKey      byte = 0x04
-	startTimeIndexKey     byte = 0x05 // Reserved
+	spanKeyPrefix         byte = 0x80 // All span keys should have first bit set to 1
+	dependencyKeyPrefix   byte = 0xC0 // Dependency keys have first two bits set to 1 (documented here only)
+	secondaryBytePrefix   byte = 0x10 // Reserved, prefix uses more than one byte
+	indexKeyRange         byte = 0x0F // Secondary indexes use last 4 bits
+	primaryKeyPrefix      byte = 0x00 // Primary keys have last 4 bits set to 0
+	serviceNameIndexKey   byte = 0x81
+	operationNameIndexKey byte = 0x82
+	tagIndexKey           byte = 0x83
+	durationIndexKey      byte = 0x84
+	startTimeIndexKey     byte = 0x85 // Reserved
 	jsonEncoding          byte = 0x01 // Last 4 bits of the meta byte are for encoding type
 )
 
@@ -48,7 +51,7 @@ func NewSpanWriter(db *badger.DB, c *CacheStore, ttl time.Duration, closer func(
 func (w *SpanWriter) WriteSpan(span *model.Span) error {
 
 	// Avoid doing as much as possible inside the transaction boundary, create entries here
-	entriesToStore := make([]*badger.Entry, 0, len(span.Tags)+4)
+	entriesToStore := make([]*badger.Entry, 0, len(span.Tags)+4+len(span.Process.Tags)+len(span.Logs)*4)
 
 	trace, err := w.createTraceEntry(span)
 	if err != nil {
@@ -65,10 +68,18 @@ func (w *SpanWriter) WriteSpan(span *model.Span) error {
 	entriesToStore = append(entriesToStore, w.createBadgerEntry(createIndexKey(durationIndexKey, durationValue, span.StartTime, span.TraceID), nil))
 
 	for _, kv := range span.Tags {
-		// Ignore other types than String for now
-		if kv.VType == model.StringType {
-			// KEY: it<serviceName><tagsKey><traceId> VALUE: <tagsValue>
-			entriesToStore = append(entriesToStore, w.createBadgerEntry(createIndexKey(tagIndexKey, []byte(span.Process.ServiceName+kv.Key+kv.VStr), span.StartTime, span.TraceID), nil))
+		// Convert everything to string since queries are done that way also
+		// KEY: it<serviceName><tagsKey><traceId> VALUE: <tagsValue>
+		entriesToStore = append(entriesToStore, w.createBadgerEntry(createIndexKey(tagIndexKey, []byte(span.Process.ServiceName+kv.Key+kv.AsString()), span.StartTime, span.TraceID), nil))
+	}
+
+	for _, kv := range span.Process.Tags {
+		entriesToStore = append(entriesToStore, w.createBadgerEntry(createIndexKey(tagIndexKey, []byte(span.Process.ServiceName+kv.Key+kv.AsString()), span.StartTime, span.TraceID), nil))
+	}
+
+	for _, log := range span.Logs {
+		for _, kv := range log.Fields {
+			entriesToStore = append(entriesToStore, w.createBadgerEntry(createIndexKey(tagIndexKey, []byte(span.Process.ServiceName+kv.Key+kv.AsString()), span.StartTime, span.TraceID), nil))
 		}
 	}
 
@@ -98,7 +109,7 @@ func createIndexKey(indexPrefixKey byte, value []byte, startTime time.Time, trac
 	// KEY: indexKey<indexValue><startTime><traceId> (traceId is last 16 bytes of the key)
 	buf := new(bytes.Buffer)
 
-	buf.WriteByte(indexPrefixKey)
+	buf.WriteByte((indexPrefixKey & indexKeyRange) | spanKeyPrefix) // Enforce to prevent future accidental key overlapping
 	buf.Write(value)
 	binary.Write(buf, binary.BigEndian, model.TimeAsEpochMicroseconds(startTime))
 	binary.Write(buf, binary.BigEndian, traceID.High)
@@ -133,7 +144,7 @@ func createTraceKV(span *model.Span) ([]byte, []byte, error) {
 	// KEY: ti<trace-id><startTime><span-id> VALUE: All the details (json for now) METADATA: Encoding
 	buf := new(bytes.Buffer)
 
-	buf.WriteByte(primaryKeyPrefix)
+	buf.WriteByte(spanKeyPrefix)
 	binary.Write(buf, binary.BigEndian, span.TraceID.High)
 	binary.Write(buf, binary.BigEndian, span.TraceID.Low)
 	binary.Write(buf, binary.BigEndian, model.TimeAsEpochMicroseconds(span.StartTime))
