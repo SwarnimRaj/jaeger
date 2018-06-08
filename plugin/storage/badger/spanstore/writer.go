@@ -46,6 +46,7 @@ const (
 	jsonEncoding          byte = 0x01 // Last 4 bits of the meta byte are for encoding type
 )
 
+// SpanWriter for writing spans to badger
 type SpanWriter struct {
 	store  *badger.DB
 	ttl    time.Duration
@@ -53,6 +54,7 @@ type SpanWriter struct {
 	closer func() error
 }
 
+// NewSpanWriter returns a SpawnWriter with cache
 func NewSpanWriter(db *badger.DB, c *CacheStore, ttl time.Duration, closer func() error) *SpanWriter {
 	return &SpanWriter{
 		store:  db,

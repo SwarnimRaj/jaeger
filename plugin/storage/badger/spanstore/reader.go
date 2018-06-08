@@ -61,11 +61,13 @@ const (
 	defaultNumTraces = 100
 )
 
+// TraceReader reads traces from the local badger store
 type TraceReader struct {
 	store *badger.DB
 	cache *CacheStore
 }
 
+// NewTraceReader returns a TraceReader with cache
 func NewTraceReader(db *badger.DB, c *CacheStore) *TraceReader {
 	return &TraceReader{
 		store: db,
@@ -124,6 +126,8 @@ func (r *TraceReader) getTraces(traceIDs []model.TraceID) ([]*model.Trace, error
 	return traces, err
 
 }
+
+// GetTrace takes a traceID and returns a Trace associated with that traceID
 func (r *TraceReader) GetTrace(traceID model.TraceID) (*model.Trace, error) {
 	traces, err := r.getTraces([]model.TraceID{traceID})
 	if err != nil {
@@ -153,6 +157,7 @@ func (r *TraceReader) GetOperations(service string) ([]string, error) {
 	return r.cache.GetOperations(service)
 }
 
+// FindTraces retrieves traces that match the traceQuery
 func (r *TraceReader) FindTraces(query *spanstore.TraceQueryParameters) ([]*model.Trace, error) {
 	err := validateQuery(query)
 	if err != nil {

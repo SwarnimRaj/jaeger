@@ -21,12 +21,14 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Options store storage plugin related configs
 type Options struct {
-	primary *namespaceConfig
-	others  map[string]*namespaceConfig
+	primary *NamespaceConfig
+	others  map[string]*NamespaceConfig
 }
 
-type namespaceConfig struct {
+// NamespaceConfig is badger's internal configuration data
+type NamespaceConfig struct {
 	namespace      string
 	SpanStoreTTL   time.Duration
 	ValueDirectory string
@@ -46,7 +48,7 @@ const (
 // NewOptions creates a new Options struct.
 func NewOptions(primaryNamespace string, otherNamespaces ...string) *Options {
 	options := &Options{
-		primary: &namespaceConfig{
+		primary: &NamespaceConfig{
 			namespace:      primaryNamespace,
 			SpanStoreTTL:   time.Hour * 72, // Default is 3 days
 			SyncWrites:     false,          // Performance over consistency
@@ -54,11 +56,11 @@ func NewOptions(primaryNamespace string, otherNamespaces ...string) *Options {
 			ValueDirectory: "",
 			KeyDirectory:   "",
 		},
-		others: make(map[string]*namespaceConfig, len(otherNamespaces)),
+		others: make(map[string]*NamespaceConfig, len(otherNamespaces)),
 	}
 
 	for _, namespace := range otherNamespaces {
-		options.others[namespace] = &namespaceConfig{namespace: namespace}
+		options.others[namespace] = &NamespaceConfig{namespace: namespace}
 	}
 
 	return options
@@ -72,7 +74,7 @@ func (opt *Options) AddFlags(flagSet *flag.FlagSet) {
 	}
 }
 
-func addFlags(flagSet *flag.FlagSet, nsConfig *namespaceConfig) {
+func addFlags(flagSet *flag.FlagSet, nsConfig *NamespaceConfig) {
 	flagSet.Bool(
 		nsConfig.namespace+suffixEphemeral,
 		nsConfig.Ephemeral,
@@ -108,7 +110,7 @@ func (opt *Options) InitFromViper(v *viper.Viper) {
 	}
 }
 
-func initFromViper(cfg *namespaceConfig, v *viper.Viper) {
+func initFromViper(cfg *NamespaceConfig, v *viper.Viper) {
 	cfg.Ephemeral = v.GetBool(cfg.namespace + suffixEphemeral)
 	cfg.KeyDirectory = v.GetString(cfg.namespace + suffixKeyDirectory)
 	cfg.ValueDirectory = v.GetString(cfg.namespace + suffixValueDirectory)
@@ -117,6 +119,6 @@ func initFromViper(cfg *namespaceConfig, v *viper.Viper) {
 }
 
 // GetPrimary returns the primary namespace configuration
-func (opt *Options) GetPrimary() *namespaceConfig {
+func (opt *Options) GetPrimary() *NamespaceConfig {
 	return opt.primary
 }

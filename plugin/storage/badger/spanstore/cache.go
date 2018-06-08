@@ -22,6 +22,7 @@ import (
 	"github.com/dgraph-io/badger"
 )
 
+// CacheStore saves expensive calculations from the K/V store
 type CacheStore struct {
 	// Given the small amount of data these will store, we use the same structure as the memory store
 	cacheLock  sync.Mutex // write heavy - Mutex is faster than RWMutex for writes
@@ -32,6 +33,7 @@ type CacheStore struct {
 	ttl   time.Duration
 }
 
+// NewCacheStore returns initialized CacheStore for badger use
 func NewCacheStore(db *badger.DB, ttl time.Duration) (*CacheStore, error) {
 	cs := &CacheStore{
 		services:   make(map[string]int64),
