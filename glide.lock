@@ -22,6 +22,14 @@ imports:
   version: 8991bc29aa16c548c550c7ff78260e27b9ab7c73
   subpackages:
   - spew
+- name: github.com/dgraph-io/badger
+  version: 690400e629977977ecddfa8ab3a7f9285e1041a8
+  subpackages:
+  - options
+  - protos
+  - skl
+  - table
+  - "y"
 - name: github.com/eapache/go-resiliency
   version: ea41b0fad31007accc7f806884dcdf3da98b79ce
   subpackages:

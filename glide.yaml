@@ -56,7 +56,7 @@ import:
 - package: github.com/go-openapi/loads
 - package: github.com/elazarl/go-bindata-assetfs
 - package: github.com/dgraph-io/badger
-  version: ~1.3.0
+  version: ~1.5.1
 - package: github.com/Shopify/sarama
   version: ^1.16.0
 # gogo/protobuf dependencies
@@ -72,3 +72,5 @@ import:
   version: master
 - package: github.com/gogo/gateway
   version: master
+- package: github.com/pelletier/go-toml
+  version: v1.2.0
