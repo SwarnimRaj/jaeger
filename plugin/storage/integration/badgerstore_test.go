@@ -34,6 +34,7 @@ type BadgerIntegrationStorage struct {
 
 func (s *BadgerIntegrationStorage) initialize() error {
 	f := badger.NewFactory()
+
 	err := f.Initialize(metrics.NullFactory, zap.NewNop())
 	if err != nil {
 		return err

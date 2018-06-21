@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"io"
 	"time"
 
 	"github.com/dgraph-io/badger"
@@ -51,16 +52,16 @@ type SpanWriter struct {
 	store  *badger.DB
 	ttl    time.Duration
 	cache  *CacheStore
-	closer func() error
+	closer io.Closer
 }
 
 // NewSpanWriter returns a SpawnWriter with cache
-func NewSpanWriter(db *badger.DB, c *CacheStore, ttl time.Duration, closer func() error) *SpanWriter {
+func NewSpanWriter(db *badger.DB, c *CacheStore, ttl time.Duration, storageCloser io.Closer) *SpanWriter {
 	return &SpanWriter{
 		store:  db,
 		ttl:    ttl,
 		cache:  c,
-		closer: closer,
+		closer: storageCloser,
 	}
 }
 
@@ -110,8 +111,8 @@ func (w *SpanWriter) WriteSpan(span *model.Span) error {
 			}
 		}
 
-		// TODO Alternative option is to use simpler keys with the merge value interface. How this scales is a bit trickier
-		// Fine after this is solved: https://github.com/dgraph-io/badger/issues/373
+		// TODO Alternative option is to use simpler keys with the merge value interface.
+		// Requires at least this to be solved: https://github.com/dgraph-io/badger/issues/373
 
 		return nil
 	})
@@ -174,5 +175,5 @@ func createTraceKV(span *model.Span) ([]byte, []byte, error) {
 
 // Close Implements io.Closer and closes the underlying storage
 func (w *SpanWriter) Close() error {
-	return w.closer()
+	return w.closer.Close()
 }

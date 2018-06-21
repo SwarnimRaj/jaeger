@@ -16,6 +16,8 @@ package badger
 
 import (
 	"flag"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/viper"
@@ -43,18 +45,23 @@ const (
 	suffixEphemeral      = ".ephemeral"
 	suffixSpanstoreTTL   = ".span-store-ttl"
 	suffixSyncWrite      = ".consistency"
+	defaultValueDir      = "/data/values"
+	defaultKeysDir       = "/data/keys"
 )
 
 // NewOptions creates a new Options struct.
 func NewOptions(primaryNamespace string, otherNamespaces ...string) *Options {
+
+	defaultDataDir := getCurrentExecutableDir()
+
 	options := &Options{
 		primary: &NamespaceConfig{
 			namespace:      primaryNamespace,
 			SpanStoreTTL:   time.Hour * 72, // Default is 3 days
-			SyncWrites:     false,          // Performance over consistency
+			SyncWrites:     false,          // Performance over durability
 			Ephemeral:      true,           // Default is ephemeral storage
-			ValueDirectory: "",
-			KeyDirectory:   "",
+			ValueDirectory: defaultDataDir + defaultValueDir,
+			KeyDirectory:   defaultDataDir + defaultKeysDir,
 		},
 		others: make(map[string]*NamespaceConfig, len(otherNamespaces)),
 	}
@@ -64,6 +71,12 @@ func NewOptions(primaryNamespace string, otherNamespaces ...string) *Options {
 	}
 
 	return options
+}
+
+func getCurrentExecutableDir() string {
+	// We ignore the error, this will fail later when trying to start the store
+	exec, _ := os.Executable()
+	return filepath.Dir(exec)
 }
 
 // AddFlags adds flags for Options
@@ -78,27 +91,27 @@ func addFlags(flagSet *flag.FlagSet, nsConfig *NamespaceConfig) {
 	flagSet.Bool(
 		nsConfig.namespace+suffixEphemeral,
 		nsConfig.Ephemeral,
-		"Mark this storage ephemeral, data is stored in tmpfs (in-memory). Default is true.",
+		"Mark this storage ephemeral, data is stored in tmpfs.",
 	)
 	flagSet.Duration(
 		nsConfig.namespace+suffixSpanstoreTTL,
 		nsConfig.SpanStoreTTL,
-		"time.Duration to store the data. Default is 72 hours (3 days).",
+		"How long to store the data. Format is time.Duration (https://golang.org/pkg/time/#Duration)",
 	)
 	flagSet.String(
 		nsConfig.namespace+suffixKeyDirectory,
 		nsConfig.KeyDirectory,
-		"Path to store the keys (indexes), this directory should reside in SSD disk. Set ephmeral to false if you want to define this setting.",
+		"Path to store the keys (indexes), this directory should reside in SSD disk. Set ephemeral to false if you want to define this setting.",
 	)
 	flagSet.String(
 		nsConfig.namespace+suffixValueDirectory,
 		nsConfig.ValueDirectory,
-		"Path to store the values (spans). Set ephmeral to false if you want to define this setting.",
+		"Path to store the values (spans). Set ephemeral to false if you want to define this setting.",
 	)
 	flagSet.Bool(
 		nsConfig.namespace+suffixSyncWrite,
 		nsConfig.SyncWrites,
-		"If all writes should be synced immediately. This will greatly reduce write performance and will require fast SSD drives. Default is false.",
+		"If all writes should be synced immediately. This will greatly reduce write performance.",
 	)
 }
 
