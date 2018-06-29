@@ -19,10 +19,12 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"time"
 
 	"github.com/dgraph-io/badger"
+	"github.com/golang/protobuf/proto"
 
 	"github.com/jaegertracing/jaeger/model"
 	"github.com/jaegertracing/jaeger/storage/spanstore"
@@ -106,8 +108,17 @@ func (r *TraceReader) getTraces(traceIDs []model.TraceID) ([]*model.Trace, error
 				}
 
 				sp := model.Span{}
-				if err := json.Unmarshal(val, &sp); err != nil {
-					return err
+				switch item.UserMeta() & 0x0F {
+				case jsonEncoding:
+					if err := json.Unmarshal(val, &sp); err != nil {
+						return err
+					}
+				case protoEncoding:
+					if err := proto.Unmarshal(val, &sp); err != nil {
+						return err
+					}
+				default:
+					return fmt.Errorf("Unknown encoding type: %04b", item.UserMeta()&0x0F)
 				}
 				spans = append(spans, &sp)
 			}

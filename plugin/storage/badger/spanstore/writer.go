@@ -18,12 +18,15 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 	"time"
 
 	"github.com/dgraph-io/badger"
 
 	"github.com/jaegertracing/jaeger/model"
+
+	"github.com/gogo/protobuf/proto"
 )
 
 /*
@@ -45,23 +48,27 @@ const (
 	durationIndexKey      byte = 0x84
 	startTimeIndexKey     byte = 0x85 // Reserved
 	jsonEncoding          byte = 0x01 // Last 4 bits of the meta byte are for encoding type
+	protoEncoding         byte = 0x02 // Last 4 bits of the meta byte are for encoding type
+	defaultEncoding       byte = protoEncoding
 )
 
 // SpanWriter for writing spans to badger
 type SpanWriter struct {
-	store  *badger.DB
-	ttl    time.Duration
-	cache  *CacheStore
-	closer io.Closer
+	store        *badger.DB
+	ttl          time.Duration
+	cache        *CacheStore
+	closer       io.Closer
+	encodingType byte
 }
 
 // NewSpanWriter returns a SpawnWriter with cache
 func NewSpanWriter(db *badger.DB, c *CacheStore, ttl time.Duration, storageCloser io.Closer) *SpanWriter {
 	return &SpanWriter{
-		store:  db,
-		ttl:    ttl,
-		cache:  c,
-		closer: storageCloser,
+		store:        db,
+		ttl:          ttl,
+		cache:        c,
+		closer:       storageCloser,
+		encodingType: defaultEncoding, // TODO Make configurable
 	}
 }
 
@@ -144,18 +151,18 @@ func (w *SpanWriter) createBadgerEntry(key []byte, value []byte) *badger.Entry {
 }
 
 func (w *SpanWriter) createTraceEntry(span *model.Span) (*badger.Entry, error) {
-	pK, pV, err := createTraceKV(span)
+	pK, pV, err := createTraceKV(span, w.encodingType)
 	if err != nil {
 		return nil, err
 	}
 
 	e := w.createBadgerEntry(pK, pV)
-	e.UserMeta = jsonEncoding
+	e.UserMeta = w.encodingType
 
 	return e, nil
 }
 
-func createTraceKV(span *model.Span) ([]byte, []byte, error) {
+func createTraceKV(span *model.Span, encodingType byte) ([]byte, []byte, error) {
 	// TODO Add Hash for Zipkin compatibility?
 
 	// Note, KEY must include startTime for proper sorting order for span-ids
@@ -168,9 +175,19 @@ func createTraceKV(span *model.Span) ([]byte, []byte, error) {
 	binary.Write(buf, binary.BigEndian, model.TimeAsEpochMicroseconds(span.StartTime))
 	binary.Write(buf, binary.BigEndian, span.SpanID)
 
-	jb, err := json.Marshal(span)
+	var bb []byte
+	var err error
 
-	return buf.Bytes(), jb, err
+	switch encodingType {
+	case protoEncoding:
+		bb, err = proto.Marshal(span)
+	case jsonEncoding:
+		bb, err = json.Marshal(span)
+	default:
+		return nil, nil, fmt.Errorf("Unknown encoding type: %04b", encodingType)
+	}
+
+	return buf.Bytes(), bb, err
 }
 
 // Close Implements io.Closer and closes the underlying storage
