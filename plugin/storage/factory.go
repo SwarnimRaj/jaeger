@@ -76,6 +76,10 @@ func (f *Factory) getFactoryOfType(factoryType string) (storage.Factory, error) 
 		return es.NewFactory(), nil
 	case memoryStorageType:
 		return memory.NewFactory(), nil
+	case kafkaStorageType:
+		return kafka.NewFactory(), nil
+	case badgerStorageType:
+		return badger.NewFactory(), nil
 	default:
 		return nil, fmt.Errorf("Unknown storage type %s. Valid types are %v", factoryType, allStorageTypes)
 	}
