@@ -140,23 +140,12 @@ func (c *CacheStore) Update(service string, operation string) {
 // GetOperations returns all operations for a specific service traced by Jaeger
 func (c *CacheStore) GetOperations(service string) ([]string, error) {
 	operations := make([]string, 0, len(c.services))
-	t := time.Now().Unix()
 	c.cacheLock.Lock()
 	defer c.cacheLock.Unlock()
 
-	if v, ok := c.services[service]; ok {
-		if v < t {
-			// Expired, remove
-			delete(c.services, service)
-			delete(c.operations, service)
-			return operations, nil // empty slice rather than nil
-		}
-		for o, e := range c.operations[service] {
-			if e > t {
-				operations = append(operations, o)
-			} else {
-				delete(c.operations[service], o)
-			}
+	if _, ok := c.services[service]; ok {
+		for o := range c.operations[service] {
+			operations = append(operations, o)
 		}
 	}
 
@@ -168,16 +157,10 @@ func (c *CacheStore) GetOperations(service string) ([]string, error) {
 // GetServices returns all services traced by Jaeger
 func (c *CacheStore) GetServices() ([]string, error) {
 	services := make([]string, 0, len(c.services))
-	t := time.Now().Unix()
 	c.cacheLock.Lock()
 	// Fetch the items
-	for k, v := range c.services {
-		if v > t {
-			services = append(services, k)
-		} else {
-			// Service has expired, remove it
-			delete(c.services, k)
-		}
+	for k := range c.services {
+		services = append(services, k)
 	}
 	c.cacheLock.Unlock()
 
