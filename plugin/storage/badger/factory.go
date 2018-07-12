@@ -104,7 +104,7 @@ func (f *Factory) Initialize(metricsFactory metrics.Factory, logger *zap.Logger)
 	}
 	f.cache = cache
 
-	go f.maintenance()
+	//go f.maintenance()
 
 	logger.Info("Badger storage configuration", zap.Any("configuration", opts))
 

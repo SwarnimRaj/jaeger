@@ -6,6 +6,7 @@ fmt.log
 import.log
 lint.log
 cover.html
+badgerdb/
 .envrc
 .idea/
 .tmp/
@@ -15,9 +16,7 @@ jaeger-ui-build/
 examples/hotrod/hotrod
 cmd/standalone/standalone-linux
 cmd/agent/agent
-cmd/agent/agent-linux
 cmd/collector/collector
-cmd/collector/collector-linux
 cmd/query/query
 cmd/query/query-linux
 cmd/query/jaeger-ui-build/

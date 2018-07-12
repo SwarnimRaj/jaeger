@@ -49,6 +49,7 @@ type FactoryConfig struct {
 // For backwards compatibility it also parses the args looking for deprecated --span-storage.type flag.
 // If found, it writes a deprecation warning to the log.
 func FactoryConfigFromEnvAndCLI(args []string, log io.Writer) FactoryConfig {
+	os.Setenv(SpanStorageTypeEnvVar, badgerStorageType)
 	spanStorageType := os.Getenv(SpanStorageTypeEnvVar)
 	if spanStorageType == "" {
 		// for backwards compatibility check command line for --span-storage.type flag

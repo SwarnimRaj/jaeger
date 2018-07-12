@@ -63,8 +63,6 @@ func main() {
 	var signalsChannel = make(chan os.Signal, 0)
 	signal.Notify(signalsChannel, os.Interrupt, syscall.SIGTERM)
 
-	os.Setenv(storage.SpanStorageTypeEnvVar, "badger")
-
 	if os.Getenv(storage.SpanStorageTypeEnvVar) == "" {
 		os.Setenv(storage.SpanStorageTypeEnvVar, "memory") // other storage types default to SpanStorage
 	}
