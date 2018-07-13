@@ -75,7 +75,7 @@ func (c *CacheStore) loadServices() error {
 
 		// Seek all the services first
 		for it.Seek(serviceKey); it.ValidForPrefix(serviceKey); it.Next() {
-			timestampStartIndex := len(it.Item().Key()) - 24
+			timestampStartIndex := len(it.Item().Key()) - (sizeOfTraceID + 8) // 8 = sizeof(uint64)
 			serviceName := string(it.Item().Key()[len(serviceKey):timestampStartIndex])
 			keyTTL := int64(it.Item().ExpiresAt())
 			if v, found := c.services[serviceName]; found {
@@ -104,7 +104,7 @@ func (c *CacheStore) loadOperations(service string) error {
 
 		// Seek all the services first
 		for it.Seek(serviceKey); it.ValidForPrefix(serviceKey); it.Next() {
-			timestampStartIndex := len(it.Item().Key()) - 24
+			timestampStartIndex := len(it.Item().Key()) - (sizeOfTraceID + 8) // 8 = sizeof(uint64)
 			operationName := string(it.Item().Key()[len(serviceKey):timestampStartIndex])
 			keyTTL := int64(it.Item().ExpiresAt())
 			if _, found := c.operations[service]; !found {

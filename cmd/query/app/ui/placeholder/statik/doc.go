@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +build !linux
-
-package badger
-
-func (f *Factory) diskStatisticsUpdate() error {
-	return nil
-}
+// Package statik is a placeholder for UI assets packaged with github.com/rakyll/statik.
+// See build_ui target in the Makefile.
+//
+// The default statik.go file in this directory is generated with:
+//    (cd cmd/query/app/ui/placeholder; statik -f)
+package statik

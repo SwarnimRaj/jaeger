@@ -1,6 +1,8 @@
-hash: f821e88548fe126d174c800f7c3a4a076cb01391f3f4f1e091cc5b24819fbf58
-updated: 2018-06-14T17:56:36.870952443-04:00
+hash: 6ce6a905c9f203c7d6d9aeb3ebd78249cf1474bb2a477e3457e974b19abf6fa5
+updated: 2018-07-10T14:06:34.322605043+03:00
 imports:
+- name: github.com/AndreasBriese/bbloom
+  version: 28f7e881ca57bc00e028f9ede9f0d9104cfeef5e
 - name: github.com/apache/thrift
   version: 53dd39833a08ce33582e5ff31fa18bb4735d6731
   subpackages:
@@ -19,17 +21,19 @@ imports:
   - assert
   - require
 - name: github.com/davecgh/go-spew
-  version: 8991bc29aa16c548c550c7ff78260e27b9ab7c73
+  version: 346938d642f2ec3594ed81d874461961cd0faa76
   subpackages:
   - spew
 - name: github.com/dgraph-io/badger
-  version: 690400e629977977ecddfa8ab3a7f9285e1041a8
+  version: a6f0866f06a0ef6ac612e427ffe5d081db4e6fab
   subpackages:
   - options
   - protos
   - skl
   - table
   - "y"
+- name: github.com/dgryski/go-farm
+  version: 2de33835d10275975374b37b2dcfd22c9020a1f5
 - name: github.com/eapache/go-resiliency
   version: ea41b0fad31007accc7f806884dcdf3da98b79ce
   subpackages:
@@ -38,8 +42,6 @@ imports:
   version: bb955e01b9346ac19dc29eb16586c90ded99a98c
 - name: github.com/eapache/queue
   version: 093482f3f8ce946c05bcba64badd2c82369e084d
-- name: github.com/elazarl/go-bindata-assetfs
-  version: 38087fe4dafb822e541b3f7955075cc1c30bd294
 - name: github.com/fsnotify/fsnotify
   version: c2828203cd70a50dcccfb2761f8b1f8ceef9a8e9
 - name: github.com/go-kit/kit
@@ -89,7 +91,7 @@ imports:
   subpackages:
   - google/api
 - name: github.com/gogo/protobuf
-  version: fd9a4790f3963525fb889cc00e0a8f828e0b3a29
+  version: 30cf7ac33676b5786e78c746683f0d4cd64fa75b
   subpackages:
   - gogoproto
   - jsonpb
@@ -169,7 +171,7 @@ imports:
   - ext
   - log
 - name: github.com/pelletier/go-toml
-  version: 4e9e0ee19b60b13eb79915933f44d8ed5f268bdd
+  version: c01d1270ff3e442a8a57cddc1c92dc1138598194
 - name: github.com/pierrec/lz4
   version: 6b9367c9ff401dbc54fabce3fb8d972e799b702d
   subpackages:
@@ -205,6 +207,10 @@ imports:
   version: 1c4bec281e4bbc75b4f4a1bd923bdf1bd989a969
 - name: github.com/PuerkitoBio/urlesc
   version: de5bf2ad457846296e2031421a34e2568e304e35
+- name: github.com/rakyll/statik
+  version: eab4de8dac7ec0cb3a6d9218d95ffe441832cb36
+  subpackages:
+  - fs
 - name: github.com/rcrowley/go-metrics
   version: e2704e165165ec55d062f5919b4b29494e9fa790
 - name: github.com/Shopify/sarama
@@ -226,7 +232,7 @@ imports:
 - name: github.com/spf13/viper
   version: b5e8006cbee93ec955a89ab31e0e3ce3204f3736
 - name: github.com/stretchr/objx
-  version: 0ab728f62c7f6fcd754334f7931c2dd659dce1d1
+  version: b8b73a35e9830ae509858c10dec5866b4d5c8bff
 - name: github.com/stretchr/testify
   version: f35b8ab0b5a2cef36673838d662e249dd9c94686
   subpackages:
@@ -295,7 +301,7 @@ imports:
   - zapcore
   - zaptest
 - name: golang.org/x/net
-  version: db08ff08e8622530d9ed3a0e8ac279f6d4c02196
+  version: a6577fac2d73be281a500b310739095313165611
   subpackages:
   - context
   - context/ctxhttp
@@ -304,6 +310,7 @@ imports:
   - http2/hpack
   - idna
   - internal/timeseries
+  - lex/httplex
   - trace
 - name: golang.org/x/sys
   version: d4feaf1a7e61e1d9e79e6c4e76c6349e9cab0a03

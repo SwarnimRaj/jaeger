@@ -1,17 +1,37 @@
+// Copyright (c) 2018 The Jaeger Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package badger
 
 import (
 	"golang.org/x/sys/unix"
 )
 
-func (f *Factory) diskStatisticsUpdate() {
+func (f *Factory) diskStatisticsUpdate() error {
 	// These stats are not interesting with Windows as there's no separate tmpfs
 	// In case of ephemeral these are the same, but we'll report them separately for consistency
 	var keyDirStatfs unix.Statfs_t
-	_ = unix.Statfs(f.Options.GetPrimary().KeyDirectory, &keyDirStatfs)
+	err := unix.Statfs(f.Options.GetPrimary().KeyDirectory, &keyDirStatfs)
+	if err != nil {
+		return err
+	}
 
 	var valDirStatfs unix.Statfs_t
-	_ = unix.Statfs(f.Options.GetPrimary().ValueDirectory, &valDirStatfs)
+	err = unix.Statfs(f.Options.GetPrimary().ValueDirectory, &valDirStatfs)
+	if err != nil {
+		return err
+	}
 
 	// Using Bavail instead of Bfree to get non-priviledged user space available
 	ValueLogSpaceAvailable.Set(int64(valDirStatfs.Bavail) * valDirStatfs.Bsize)
@@ -23,4 +43,5 @@ func (f *Factory) diskStatisticsUpdate() {
 	 and with the keys the LSM compaction must remove the offending files also. Thus, there's no guarantee the clean up would
 	 actually reduce the amount of diskspace used any faster than allowing TTL to remove them.
 	*/
+	return nil
 }

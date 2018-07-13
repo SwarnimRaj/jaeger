@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +build !linux
+// +build !ui
 
-package badger
+package ui
 
-func (f *Factory) diskStatisticsUpdate() error {
-	return nil
-}
+import _ "github.com/jaegertracing/jaeger/cmd/query/app/ui/placeholder/statik" // init static assets

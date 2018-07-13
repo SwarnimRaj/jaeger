@@ -23,10 +23,9 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger"
+	"github.com/gogo/protobuf/proto"
 
 	"github.com/jaegertracing/jaeger/model"
-
-	"github.com/gogo/protobuf/proto"
 )
 
 /*
