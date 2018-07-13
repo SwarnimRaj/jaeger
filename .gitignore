@@ -6,7 +6,6 @@ fmt.log
 import.log
 lint.log
 cover.html
-badgerdb/
 .envrc
 .idea/
 .tmp/
