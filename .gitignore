@@ -14,7 +14,9 @@ vendor/
 examples/hotrod/hotrod
 cmd/standalone/standalone-linux
 cmd/agent/agent
+cmd/agent/agent-linux
 cmd/collector/collector
+cmd/collector/collector-linux
 cmd/query/query
 cmd/query/query-linux
 crossdock/crossdock-linux
