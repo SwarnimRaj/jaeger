@@ -15,9 +15,11 @@
 package badger
 
 import (
+	"expvar"
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	assert "github.com/stretchr/testify/require"
 	"github.com/uber/jaeger-lib/metrics"
@@ -61,4 +63,40 @@ func TestForCodecov(t *testing.T) {
 	// Now try to close, since the files have been deleted this should throw an error hopefully
 	err = f.Close()
 	assert.Error(t, err)
+}
+
+func TestMaintenanceRun(t *testing.T) {
+	// For Codecov - this does not test anything
+	f := NewFactory()
+	v, _ := config.Viperize(f.AddFlags)
+	f.InitFromViper(v)
+	// Safeguard
+	assert.True(t, LastMaintenanceRun.Value() == 0)
+	// Lets speed up the maintenance ticker..
+	f.maintenanceInterval = time.Duration(10) * time.Millisecond
+	f.Initialize(metrics.NullFactory, zap.NewNop())
+
+	waiter := func(previousValue int64) int64 {
+		sleeps := 0
+		for LastMaintenanceRun.Value() == previousValue && sleeps < 8 {
+			// Potentially wait for scheduler
+			time.Sleep(time.Duration(100) * time.Millisecond)
+			sleeps++
+		}
+		assert.True(t, LastMaintenanceRun.Value() > previousValue)
+		return LastMaintenanceRun.Value()
+	}
+
+	runtime := waiter(0) // First run, check that it was ran and caches previous size
+
+	// This is to for codecov only. Can break without anything else breaking as it does test badger's
+	// internal implementation
+	vlogSize := expvar.Get("badger_vlog_size_bytes").(*expvar.Map).Get(f.tmpDir).(*expvar.Int)
+	currSize := vlogSize.Value()
+	vlogSize.Set(currSize + 1<<31)
+
+	runtime = waiter(runtime)
+	assert.True(t, LastValueLogCleaned.Value() > 0)
+	err := f.Close()
+	assert.NoError(t, err)
 }
