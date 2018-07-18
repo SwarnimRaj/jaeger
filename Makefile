@@ -386,3 +386,7 @@ proto-install:
 		./vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger
 		# ./vendor/github.com/mwitkow/go-proto-validators/protoc-gen-govalidators \
 		# ./vendor/github.com/rakyll/statik
+
+rpm: install
+	GOOS=linux $(MAKE) build-agent build-collector
+	fpm --rpm-os linux -a x86_64 -s dir -t rpm -n jaeger $(GOPATH)/src/github.com/jaegertracing/jaeger/cmd/agent/agent-linux=/bin/ $(GOPATH)/src/github.com/jaegertracing/jaeger/cmd/collector/collector-linux=/bin/
